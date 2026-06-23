@@ -7,7 +7,6 @@ from sklearn.preprocessing import StandardScaler
 # Set page layout to wide for dashboard look
 st.set_page_config(layout="wide")
 
-# The exact logo text and context headers you wanted to protect
 st.title("🚨 Live Trade Fraud Simulation: The Scrap Plastic Smuggler Game")
 st.markdown("""
     **Classroom Context:** Students act as 'bad actors' trying to bypass customs by hiding low-value plastic scrap 
@@ -21,12 +20,31 @@ baseline_prices = {
     390410: 3.90   # Virgin PVC
 }
 
-# --- Persistent Data Storage (Session State) ---
-# NOW STARTS COMPLETELY EMPTY AND NEUTRAL
-if "submissions" not in st.session_state:
-    st.session_state.submissions = pd.DataFrame(columns=[
-        "Trader Name", "HS Code", "Weight (KG)", "Declared Price ($/KG)"
-    ])
+# --- GLOBAL SHARED DATABASE MANAGER (Bridges all student devices) ---
+class GlobalDataManager:
+    def __init__(self):
+        self.df = pd.DataFrame(columns=[
+            "Trader Name", "HS Code", "Weight (KG)", "Declared Price ($/KG)"
+        ])
+    
+    def add_submission(self, row):
+        self.df = pd.concat([self.df, pd.DataFrame([row])], ignore_index=True)
+        
+    def clear_database(self):
+        self.df = pd.DataFrame(columns=[
+            "Trader Name", "HS Code", "Weight (KG)", "Declared Price ($/KG)"
+        ])
+
+@st.cache_resource
+def get_global_database():
+    return GlobalDataManager()
+
+# Initialize global shared cloud database connection
+db = get_global_database()
+
+# Initialize local session state for the reveal mechanism toggle
+if "reveal_results" not in st.session_state:
+    st.session_state.reveal_results = False
 
 # Layout Split: 1/3 Student Form, 2/3 Teacher Dashboard
 col1, col2 = st.columns([1, 2])
@@ -74,83 +92,139 @@ with col1:
                     "Weight (KG)": weight,
                     "Declared Price ($/KG)": price
                 }
-                st.session_state.submissions = pd.concat([
-                    st.session_state.submissions, 
-                    pd.DataFrame([new_row])
-                ], ignore_index=True)
+                db.add_submission(new_row)
                 st.success(f"Manifest successfully submitted for {student_name}!")
 
 # --- COLUMN 2: LIVE TEACHER MACHINE LEARNING DASHBOARD ---
 with col2:
     st.header("🖥️ Live Customs ML Control Panel")
     
-    df = st.session_state.submissions.copy()
-    
-    # Custom profile rules engine that works cleanly for empty or growing datasets
-    def define_profile(row):
-        base_p = baseline_prices.get(int(row["HS Code"]), 4.0)
-        deficit = base_p - float(row["Declared Price ($/KG)"])
-        if int(row["Weight (KG)"]) == 100000 and deficit > 2.0:
-            return "🚨 CRITICAL RISK: Large-scale Waste Dumping"
-        elif deficit <= 0.0:
-            return "✅ LOW RISK: Fully Compliant Market Price"
-        elif int(row["Weight (KG)"]) == 10000 and deficit > 1.0:
-            return "⚠️ MEDIUM RISK: Stealth Smuggling Attempt"
+    # Action Deck Buttons
+    c_btn1, c_btn2 = st.columns(2)
+    with c_btn1:
+        if st.button("🔄 Sync Incoming Submissions", type="primary", use_container_width=True):
+            st.rerun()
+    with c_btn2:
+        # Toggle showing or hiding the final results to the classroom
+        if st.session_state.reveal_results:
+            if st.button("🔒 Hide Results From Class", use_container_width=True):
+                st.session_state.reveal_results = False
+                st.rerun()
         else:
-            return "🔍 MODERATE RISK: Suspicious Value Manipulation"
+            if st.button("🔓 Reveal Results to Class", use_container_width=True):
+                st.session_state.reveal_results = True
+                st.rerun()
 
-    # Process metrics and ML calculations dynamically
+    df = db.df.copy()
+    total_manifests = len(df)
+    
+    # Core calculations run in background to keep data structured
     if not df.empty:
         df["Baseline Price"] = df["HS Code"].map(baseline_prices)
         df["Price Deficit"] = df["Baseline Price"] - df["Declared Price ($/KG)"]
         
-        # ML K-Means starts tracking automatically once 3 or more manifests are logged
-        if len(df) >= 3:
-            try:
-                X = df[["Weight (KG)", "Price Deficit"]]
-                scaler = StandardScaler()
-                X_scaled = scaler.fit_transform(X)
-                kmeans = KMeans(n_clusters=3, random_state=42, n_init=10)
-                df["Cluster_ID"] = kmeans.fit_predict(X_scaled)
-            except:
-                pass
-                
-        df["Risk Profile"] = df.apply(define_profile, axis=1)
-        most_suspicious_hs = f"HS {df.groupby('HS Code')['Price Deficit'].mean().idxmax()}"
-        total_manifests = len(df)
-    else:
-        most_suspicious_hs = "None"
-        total_manifests = 0
-
-    # Display Metrics Panel
-    w1, w2 = st.columns(2)
-    w1.metric(label="Total Manifests Scanned", value=total_manifests)
-    w2.metric(label="Most Suspicious Exploited HS Code", value=most_suspicious_hs, 
-              delta="Highest Price Deficit" if total_manifests > 0 else None)
-    
-    st.subheader("🕵️ Live Risk Watchlist (Real-time ML Analysis)")
-    
-    # Display table logic
-    if not df.empty:
-        display_df = df[["Trader Name", "HS Code", "Weight (KG)", "Declared Price ($/KG)", "Risk Profile"]]
+        def define_profile(row):
+            base_p = baseline_prices.get(int(row["HS Code"]), 4.0)
+            deficit = base_p - float(row["Declared Price ($/KG)"])
+            if int(row["Weight (KG)"]) == 100000 and deficit > 2.0:
+                return "🚨 CRITICAL RISK: Large-scale Waste Dumping"
+            elif deficit <= 0.0:
+                return "✅ LOW RISK: Fully Compliant Market Price"
+            elif int(row["Weight (KG)"]) == 10000 and deficit > 1.0:
+                return "⚠️ MEDIUM RISK: Stealth Smuggling Attempt"
+            else:
+                return "🔍 MODERATE RISK: Suspicious Value Manipulation"
         
-        def highlight_risk(val):
-            if "CRITICAL" in str(val): return 'background-color: #ffcccc; color: black; font-weight: bold;'
-            elif "MEDIUM" in str(val): return 'background-color: #fff2cc; color: black;'
-            elif "LOW" in str(val): return 'background-color: #e2efda; color: black;'
-            return ''
-            
-        st.dataframe(
-            display_df.style.map(highlight_risk, subset=["Risk Profile"]),
-            use_container_width=True
-        )
+        df["Risk Profile"] = df.apply(define_profile, axis=1)
+
+    # STATE A: RESULTS HIDDEN (TEACHER MODE)
+    if not st.session_state.reveal_results:
+        st.info(f"📥 Neutral Data Collection Mode Active. Total manifests captured silently: **{total_manifests}**.")
+        st.markdown("""
+            > **Teacher Hint:** Let all students finish scanning and submitting their manifestations on their phones. 
+            > Once the counter stops rising, click the green **'Reveal Results to Class'** button above to show the charts and catch the smugglers!
+        """)
+        
+    # STATE B: REVEAL UNLOCKED (THE MATRIX DETECTED)
     else:
-        st.info("Awaiting the first digital customs manifest submission from students...")
+        if not df.empty:
+            # Metric Block
+            most_suspicious_hs = f"HS {df.groupby('HS Code')['Price Deficit'].mean().idxmax()}"
+            w1, w2 = st.columns(2)
+            w1.metric(label="Total Manifests Scanned", value=total_manifests)
+            w2.metric(label="Primary Suspect Code Cluster", value=most_suspicious_hs)
+            
+            # --- REAL-TIME PRICE DEVIATION VISUALIZATION ---
+            st.subheader("📊 Price Contamination Trends (Declared vs. Real Market Value)")
+            
+            # Formulate comparison frame grouped by code
+            chart_data = []
+            for code in [390110, 390210, 390410]:
+                sub_df = df[df["HS Code"] == code]
+                avg_dec = sub_df["Declared Price ($/KG)"].mean() if not sub_df.empty else 0
+                chart_data.append({
+                    "HS Code": f"HS {code}",
+                    "Students Declared Avg": avg_dec,
+                    "True Market Price": baseline_prices[code]
+                })
+            
+            chart_df = pd.DataFrame(chart_data).set_index("HS Code")
+            st.bar_chart(chart_df, use_container_width=True)
+            
+            # --- AUTOMATED REGULATORY COMMENTARY BLOCK ---
+            st.subheader("🤖 Automated Customs Fraud Intelligence Reports")
+            
+            has_alerts = False
+            for code in [390110, 390210, 390410]:
+                sub_df = df[df["HS Code"] == code]
+                if not sub_df.empty:
+                    avg_def = sub_df["Price Deficit"].mean()
+                    total_vol = sub_df["Weight (KG)"].sum()
+                    exploiters_count = len(sub_df)
+                    
+                    if avg_def > 2.0 and total_vol >= 100000:
+                        has_alerts = True
+                        st.error(f"""
+                            **🔴 CRITICAL ANOMALY DETECTED IN CODE: HS {code}**<br>
+                            * **Fraud Pattern:** Flagrant Value Mismatch & Inverse Price-Volume Signature.<br>
+                            * **Analysis:** {exploiters_count} shipments are dumping high volumes ({total_vol:,} KG) 
+                            at crash-level scrap rates (Avg Deficit: ${avg_def:.2f}/KG). This is a strong mathematical indicator 
+                            of traders misclassifying low-value plastic scrap to illegally bypass the 34% import tax threshold.
+                        """, unsafe_allow_html=True)
+                    elif avg_def > 1.0:
+                        has_alerts = True
+                        st.warning(f"""
+                            **🟡 SUSPICIOUS ACTIVITY DETECTED IN CODE: HS {code}**<br>
+                            * **Fraud Pattern:** Tactical Value Undervaluation.<br>
+                            * **Analysis:** Declared values are consistently tracking below the premium virgin polymer 
+                            benchmark. While volumes remain discrete, this pattern indicates an active regulatory blind spot used 
+                            for tariff evasion or minor scrap integration.
+                        """, unsafe_allow_html=True)
+            
+            if not has_alerts:
+                st.success("🟢 **System Clean:** No definitive price contamination signatures detected across tracked HS families yet.")
+                
+            # --- FULL LIVE RISK TABLE WATCHLIST ---
+            st.subheader("🕵️ Live Risk Watchlist (Real-time ML Analysis)")
+            display_df = df[["Trader Name", "HS Code", "Weight (KG)", "Declared Price ($/KG)", "Risk Profile"]]
+            
+            def highlight_risk(val):
+                if "CRITICAL" in str(val): return 'background-color: #ffcccc; color: black; font-weight: bold;'
+                elif "MEDIUM" in str(val): return 'background-color: #fff2cc; color: black;'
+                elif "LOW" in str(val): return 'background-color: #e2efda; color: black;'
+                return ''
+                
+            st.dataframe(
+                display_df.style.map(highlight_risk, subset=["Risk Profile"]),
+                use_container_width=True
+            )
+        else:
+            st.info("The database is currently neutral. Awaiting student submissions before analysis can be unlocked.")
 
     # --- CAMOUFLAGED TEACHER RESET KEY (ONLY YOU KNOW) ---
-    # Creates vertical separation and hides inside a tiny dot expander at the very bottom
     st.markdown("<br><br><br><br><br>", unsafe_allow_html=True)
     with st.expander("·", expanded=False):
-        if st.button("🔄 Reset Simulation Data"):
-            del st.session_state.submissions
+        if st.button("🗑️ Reset All Global Data"):
+            db.clear_database()
+            st.session_state.reveal_results = False
             st.rerun()
