@@ -14,15 +14,14 @@ st.markdown("""
 """)
 
 # --- Expanded Legitimate Baseline Data Reference ---
-# Incorporates the core high-risk and catch-all codes highlighted in the text
 baseline_prices = {
-    390110: 4.20,  # Virgin Polyethylene [cite: 213]
-    390210: 4.50,  # Virgin Polypropylene [cite: 213, 804]
+    390110: 4.20,  # Virgin Polyethylene
+    390210: 4.50,  # Virgin Polypropylene
     390319: 3.80,  # Virgin Polystyrene
-    390410: 3.90,  # Virgin PVC [cite: 804]
-    390729: 5.20,  # Polyethers / Specialty Resin [cite: 213, 804]
-    392020: 4.80,  # PP Plates/Sheets [cite: 804]
-    392690: 6.50   # Other Finished Plastic Articles (High-Value Catch-All) 
+    390410: 3.90,  # Virgin PVC
+    390729: 5.20,  # Specialty Polyether Resins
+    392020: 4.80,  # PP Plates/Sheets
+    392690: 6.50   # Technical Finished Plastics (Catch-All Category)
 }
 
 hs_descriptions = {
@@ -35,7 +34,7 @@ hs_descriptions = {
     392690: "Finished Technical Plastic Articles"
 }
 
-# --- GLOBAL SHARED DATABASE MANAGER (Bridges all student devices) ---
+# --- GLOBAL SHARED DATABASE MANAGER ---
 class GlobalDataManager:
     def __init__(self):
         self.df = pd.DataFrame(columns=[
@@ -151,17 +150,16 @@ with col2:
         
         df["Risk Profile"] = df.apply(define_profile, axis=1)
 
-    # STATE A: RESULTS HIDDEN (TEACHER SILENT DATA COLLECTION MODE)
+    # STATE A: RESULTS HIDDEN
     if not st.session_state.reveal_results:
         st.info(f"📥 Neutral Data Collection Mode Active. Total manifests captured silently: **{total_manifests}**.")
         
-    # STATE B: REVEAL UNLOCKED (THE ANALYTICS ARE VISIBLE)
+    # STATE B: REVEAL UNLOCKED
     else:
         if not df.empty:
             # Multi-HS Code Metric Ranking Panel
             st.subheader("📊 Suspect Code Cluster Deviations")
             
-            # Identify all unique codes exploited by students ranked by highest evasion margin
             grouped_deficits = df.groupby("HS Code")["Price Deficit"].mean().sort_values(ascending=False)
             
             metric_cols = st.columns(min(len(grouped_deficits), 4))
@@ -190,7 +188,7 @@ with col2:
             chart_df = pd.DataFrame(chart_data).set_index("HS Code")
             st.bar_chart(chart_df, use_container_width=True)
             
-            # --- FIXED AUTOMATED REGULATORY COMMENTARY BLOCK ---
+            # --- AUTOMATED REGULATORY COMMENTARY BLOCK ---
             st.subheader("🤖 Automated Customs Fraud Intelligence Reports")
             
             has_alerts = False
@@ -201,22 +199,20 @@ with col2:
                     total_vol = sub_df["Weight (KG)"].sum()
                     exploiters_count = len(sub_df)
                     
-                    # ALERT TYPE 1: Large scale volume mismatch (Inverse Price-Volume Signature) [cite: 8, 37]
                     if avg_def > 2.0 and total_vol >= 100000:
                         has_alerts = True
                         st.error(f"""
                         **🔴 CRITICAL ANOMALY IN CODE: HS {code} ({hs_descriptions[code]})**
-                        * **Fraud Signature:** High-Volume Price Contamination[cite: 834].
-                        * **Analysis:** {exploiters_count} trade entities are dumping large volumes ({total_vol:,} KG) at artificial, scrap-level prices (Avg Deficit: ${avg_def:.2f}/KG). This matches the paper's *inverse price-volume signature*—where falling unit values run parallel to volume spikes, exposing calculated evasion of the 34% solid waste environmental tax[cite: 8, 212, 217].
+                        * **Fraud Signature:** High-Volume Price Contamination.
+                        * **Analysis:** {exploiters_count} trade entities are dumping large volumes ({total_vol:,} KG) at artificial, scrap-level prices (Avg Deficit: ${avg_def:.2f}/KG). This matches the inverse price-volume signature—where falling unit values run parallel to volume spikes, exposing calculated evasion of the solid waste environmental tax.
                         """)
                     
-                    # ALERT TYPE 2: Strategic / Low-volume manipulation
                     elif avg_def > 1.0:
                         has_alerts = True
                         st.warning(f"""
                         **🟡 SUSPICIOUS ACTIVITY IN CODE: HS {code} ({hs_descriptions[code]})**
-                        * **Fraud Signature:** Tactical Value Manipulation[cite: 41].
-                        * **Analysis:** Declared import entries are consistently tracking below premium resin index baselines. While cargo volume stays discrete to prevent immediate border inspections, this pattern suggests deliberate under-invoicing or hidden contamination vectors[cite: 7].
+                        * **Fraud Signature:** Tactical Value Manipulation.
+                        * **Analysis:** Declared import entries are consistently tracking below premium resin index baselines. While cargo volume stays discrete to prevent immediate border inspections, this pattern suggests deliberate under-invoicing or hidden contamination vectors.
                         """)
             
             if not has_alerts:
@@ -239,7 +235,7 @@ with col2:
         else:
             st.info("The database is currently neutral. Awaiting student submissions before analysis can be unlocked.")
 
-    # --- CAMOUFLAGED TEACHER RESET KEY (ONLY YOU KNOW) ---
+    # --- CAMOUFLAGED TEACHER RESET KEY (Hidden inside the dot expander) ---
     st.markdown("<br><br><br><br><br>", unsafe_allow_html=True)
     with st.expander("·", expanded=False):
         if st.button("🗑️ Reset All Global Data"):
