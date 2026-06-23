@@ -13,7 +13,7 @@ st.markdown("""
     under premium virgin plastic HS codes. The ML pipeline on the right detects their patterns live!
 """)
 
-# ---Legitimate Baseline Data Reference ---
+# --- Legitimate Baseline Data Reference ---
 baseline_prices = {
     390110: 4.20,  # Virgin Polyethylene
     390210: 4.50,  # Virgin Polypropylene
@@ -34,9 +34,17 @@ if "submissions" not in st.session_state:
 # Layout Split: 1/3 Student Form, 2/3 Teacher Dashboard
 col1, col2 = st.columns([1, 2])
 
-# --- COLUMN 1: STUDENT INPUT INTERFACE ---
+# --- COLUMN 1: STUDENT INPUT INTERFACE & QR CODE ---
 with col1:
     st.header("📥 Student Submission Portal")
+    
+    # --- EMBEDDED QR CODE DISPLAY ---
+    st.markdown("### 📲 Scan to Join the Game Live!")
+    app_url = "https://scrap-plastic-misclassification-simulation-jghvmoc7yc3tvmrhyul.streamlit.app/"
+    qr_api_url = f"https://api.qrserver.com/v1/create-qr-code/?size=200x200&data={app_url}"
+    st.image(qr_api_url, caption="Scan with your phone camera to play", width=200)
+    st.markdown("---")
+    
     with st.form(key="student_form", clear_on_submit=True):
         student_name = st.text_input("Enter your Smuggler Alias / Name:", placeholder="e.g., Anonymous Trader")
         
@@ -58,7 +66,7 @@ with col1:
             format_func=lambda x: f"${x:.2f} / KG"
         )
         
-        submit_button = st.form_submit_with_button_choices = st.form_submit_button(label="🚀 Submit Manifest to Customs")
+        submit_button = st.form_submit_button(label="🚀 Submit Manifest to Customs")
         
         if submit_button:
             if student_name.strip() == "":
@@ -88,7 +96,6 @@ with col2:
     df["Price Deficit"] = df["Baseline Price"] - df["Declared Price ($/KG)"]
     
     # Run K-Means Live Clustering
-    # Clusters represent: 0=Compliant, 1=Tactical Risk, 2=High-Risk Flagrant Fraud
     try:
         X = df[["Weight (KG)", "Price Deficit"]]
         scaler = StandardScaler()
@@ -117,7 +124,7 @@ with col2:
     most_suspicious_hs = df.groupby("HS Code")["Price Deficit"].mean().idxmax()
     
     w1, w2 = st.columns(2)
-    w1.metric(label="Total Mainfests Scanned", value=len(df))
+    w1.metric(label="Total Manifests Scanned", value=len(df))
     w2.metric(label="Most Suspicious Exploited HS Code", value=f"HS {most_suspicious_hs}", delta="Highest Price Deficit")
     
     st.subheader("🕵️ Live Risk Watchlist (Real-time ML Analysis)")
@@ -131,8 +138,9 @@ with col2:
         elif "LOW" in str(val): return 'background-color: #e2efda; color: black;'
         return ''
         
+    # FIX: Replaced deprecated .applymap() with .map() for Pandas 2.0 compatibility
     st.dataframe(
-        display_df.style.applymap(highlight_risk, subset=["Risk Profile"]),
+        display_df.style.map(highlight_risk, subset=["Risk Profile"]),
         use_container_width=True
     )
     
