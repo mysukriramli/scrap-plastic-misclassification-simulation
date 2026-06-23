@@ -13,11 +13,26 @@ st.markdown("""
     under premium virgin plastic HS codes. The ML pipeline on the right detects their patterns live!
 """)
 
-# --- Legitimate Baseline Data Reference ---
+# --- Expanded Legitimate Baseline Data Reference ---
+# Incorporates the core high-risk and catch-all codes highlighted in the text
 baseline_prices = {
-    390110: 4.20,  # Virgin Polyethylene
-    390210: 4.50,  # Virgin Polypropylene
-    390410: 3.90   # Virgin PVC
+    390110: 4.20,  # Virgin Polyethylene [cite: 213]
+    390210: 4.50,  # Virgin Polypropylene [cite: 213, 804]
+    390319: 3.80,  # Virgin Polystyrene
+    390410: 3.90,  # Virgin PVC [cite: 804]
+    390729: 5.20,  # Polyethers / Specialty Resin [cite: 213, 804]
+    392020: 4.80,  # PP Plates/Sheets [cite: 804]
+    392690: 6.50   # Other Finished Plastic Articles (High-Value Catch-All) 
+}
+
+hs_descriptions = {
+    390110: "Premium Virgin Polyethylene",
+    390210: "Premium Virgin Polypropylene",
+    390319: "Standard Virgin Polystyrene",
+    390410: "Virgin PVC Industrial Resin",
+    390729: "Specialty Polyether Resins",
+    392020: "Rigid PP Plates & Sheets",
+    392690: "Finished Technical Plastic Articles"
 }
 
 # --- GLOBAL SHARED DATABASE MANAGER (Bridges all student devices) ---
@@ -64,8 +79,8 @@ with col1:
         
         hs_code = st.selectbox(
             "Select HS Code to hide your scrap in:",
-            options=[390110, 390210, 390410],
-            format_func=lambda x: f"HS {x} (Premium Virgin Polymer)"
+            options=list(baseline_prices.keys()),
+            format_func=lambda x: f"HS {x} ({hs_descriptions[x]})"
         )
         
         weight = st.selectbox(
@@ -105,7 +120,6 @@ with col2:
         if st.button("🔄 Sync Incoming Submissions", type="primary", use_container_width=True):
             st.rerun()
     with c_btn2:
-        # Toggle showing or hiding the final results to the classroom
         if st.session_state.reveal_results:
             if st.button("🔒 Hide Results From Class", use_container_width=True):
                 st.session_state.reveal_results = False
@@ -137,29 +151,34 @@ with col2:
         
         df["Risk Profile"] = df.apply(define_profile, axis=1)
 
-    # STATE A: RESULTS HIDDEN (TEACHER MODE)
+    # STATE A: RESULTS HIDDEN (TEACHER SILENT DATA COLLECTION MODE)
     if not st.session_state.reveal_results:
         st.info(f"📥 Neutral Data Collection Mode Active. Total manifests captured silently: **{total_manifests}**.")
-        st.markdown("""
-            > **Teacher Hint:** Let all students finish scanning and submitting their manifestations on their phones. 
-            > Once the counter stops rising, click the green **'Reveal Results to Class'** button above to show the charts and catch the smugglers!
-        """)
         
-    # STATE B: REVEAL UNLOCKED (THE MATRIX DETECTED)
+    # STATE B: REVEAL UNLOCKED (THE ANALYTICS ARE VISIBLE)
     else:
         if not df.empty:
-            # Metric Block
-            most_suspicious_hs = f"HS {df.groupby('HS Code')['Price Deficit'].mean().idxmax()}"
-            w1, w2 = st.columns(2)
-            w1.metric(label="Total Manifests Scanned", value=total_manifests)
-            w2.metric(label="Primary Suspect Code Cluster", value=most_suspicious_hs)
+            # Multi-HS Code Metric Ranking Panel
+            st.subheader("📊 Suspect Code Cluster Deviations")
             
-            # --- REAL-TIME PRICE DEVIATION VISUALIZATION ---
-            st.subheader("📊 Price Contamination Trends (Declared vs. Real Market Value)")
+            # Identify all unique codes exploited by students ranked by highest evasion margin
+            grouped_deficits = df.groupby("HS Code")["Price Deficit"].mean().sort_values(ascending=False)
             
-            # Formulate comparison frame grouped by code
+            metric_cols = st.columns(min(len(grouped_deficits), 4))
+            for idx, (code, avg_def) in enumerate(grouped_deficits.items()):
+                if idx < len(metric_cols):
+                    metric_cols[idx].metric(
+                        label=f"Exploited HS {code}", 
+                        value=f"${avg_def:.2f} Deficit",
+                        delta="High Value Deficit", 
+                        delta_color="inverse"
+                    )
+            
+            # --- REAL-TIME MULTI-CODE PRICE VISUALIZATION ---
+            st.subheader("📈 Declared Price Contamination vs. Real Market Value")
+            
             chart_data = []
-            for code in [390110, 390210, 390410]:
+            for code in baseline_prices.keys():
                 sub_df = df[df["HS Code"] == code]
                 avg_dec = sub_df["Declared Price ($/KG)"].mean() if not sub_df.empty else 0
                 chart_data.append({
@@ -171,35 +190,34 @@ with col2:
             chart_df = pd.DataFrame(chart_data).set_index("HS Code")
             st.bar_chart(chart_df, use_container_width=True)
             
-            # --- AUTOMATED REGULATORY COMMENTARY BLOCK ---
+            # --- FIXED AUTOMATED REGULATORY COMMENTARY BLOCK ---
             st.subheader("🤖 Automated Customs Fraud Intelligence Reports")
             
             has_alerts = False
-            for code in [390110, 390210, 390410]:
+            for code in baseline_prices.keys():
                 sub_df = df[df["HS Code"] == code]
                 if not sub_df.empty:
                     avg_def = sub_df["Price Deficit"].mean()
                     total_vol = sub_df["Weight (KG)"].sum()
                     exploiters_count = len(sub_df)
                     
+                    # ALERT TYPE 1: Large scale volume mismatch (Inverse Price-Volume Signature) [cite: 8, 37]
                     if avg_def > 2.0 and total_vol >= 100000:
                         has_alerts = True
                         st.error(f"""
-                            **🔴 CRITICAL ANOMALY DETECTED IN CODE: HS {code}**<br>
-                            * **Fraud Pattern:** Flagrant Value Mismatch & Inverse Price-Volume Signature.<br>
-                            * **Analysis:** {exploiters_count} shipments are dumping high volumes ({total_vol:,} KG) 
-                            at crash-level scrap rates (Avg Deficit: ${avg_def:.2f}/KG). This is a strong mathematical indicator 
-                            of traders misclassifying low-value plastic scrap to illegally bypass the 34% import tax threshold.
-                        """, unsafe_allow_html=True)
+                        **🔴 CRITICAL ANOMALY IN CODE: HS {code} ({hs_descriptions[code]})**
+                        * **Fraud Signature:** High-Volume Price Contamination[cite: 834].
+                        * **Analysis:** {exploiters_count} trade entities are dumping large volumes ({total_vol:,} KG) at artificial, scrap-level prices (Avg Deficit: ${avg_def:.2f}/KG). This matches the paper's *inverse price-volume signature*—where falling unit values run parallel to volume spikes, exposing calculated evasion of the 34% solid waste environmental tax[cite: 8, 212, 217].
+                        """)
+                    
+                    # ALERT TYPE 2: Strategic / Low-volume manipulation
                     elif avg_def > 1.0:
                         has_alerts = True
                         st.warning(f"""
-                            **🟡 SUSPICIOUS ACTIVITY DETECTED IN CODE: HS {code}**<br>
-                            * **Fraud Pattern:** Tactical Value Undervaluation.<br>
-                            * **Analysis:** Declared values are consistently tracking below the premium virgin polymer 
-                            benchmark. While volumes remain discrete, this pattern indicates an active regulatory blind spot used 
-                            for tariff evasion or minor scrap integration.
-                        """, unsafe_allow_html=True)
+                        **🟡 SUSPICIOUS ACTIVITY IN CODE: HS {code} ({hs_descriptions[code]})**
+                        * **Fraud Signature:** Tactical Value Manipulation[cite: 41].
+                        * **Analysis:** Declared import entries are consistently tracking below premium resin index baselines. While cargo volume stays discrete to prevent immediate border inspections, this pattern suggests deliberate under-invoicing or hidden contamination vectors[cite: 7].
+                        """)
             
             if not has_alerts:
                 st.success("🟢 **System Clean:** No definitive price contamination signatures detected across tracked HS families yet.")
