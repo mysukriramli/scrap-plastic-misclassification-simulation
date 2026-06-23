@@ -7,6 +7,7 @@ from sklearn.preprocessing import StandardScaler
 # Set page layout to wide for dashboard look
 st.set_page_config(layout="wide")
 
+# The exact logo text and context headers you wanted to protect
 st.title("🚨 Live Trade Fraud Simulation: The Scrap Plastic Smuggler Game")
 st.markdown("""
     **Classroom Context:** Students act as 'bad actors' trying to bypass customs by hiding low-value plastic scrap 
@@ -21,14 +22,10 @@ baseline_prices = {
 }
 
 # --- Persistent Data Storage (Session State) ---
+# NOW STARTS COMPLETELY EMPTY AND NEUTRAL
 if "submissions" not in st.session_state:
-    # Pre-populate with 5 diverse dummy entries so the K-Means has background noise
-    st.session_state.submissions = pd.DataFrame([
-        {"Trader Name": "GenuineCorp A", "HS Code": 390110, "Weight (KG)": 25000, "Declared Price ($/KG)": 4.10},
-        {"Trader Name": "GenuineCorp B", "HS Code": 390210, "Weight (KG)": 10000, "Declared Price ($/KG)": 4.50},
-        {"Trader Name": "ShadowBroker LLC", "HS Code": 390210, "Weight (KG)": 100000, "Declared Price ($/KG)": 0.50},
-        {"Trader Name": "EcoRecycle Ltd", "HS Code": 390410, "Weight (KG)": 25000, "Declared Price ($/KG)": 1.80},
-        {"Trader Name": "GenuineCorp C", "HS Code": 390410, "Weight (KG)": 10000, "Declared Price ($/KG)": 3.80},
+    st.session_state.submissions = pd.DataFrame(columns=[
+        "Trader Name", "HS Code", "Weight (KG)", "Declared Price ($/KG)"
     ])
 
 # Layout Split: 1/3 Student Form, 2/3 Teacher Dashboard
@@ -38,7 +35,6 @@ col1, col2 = st.columns([1, 2])
 with col1:
     st.header("📥 Student Submission Portal")
     
-    # --- EMBEDDED QR CODE DISPLAY ---
     st.markdown("### 📲 Scan to Join the Game Live!")
     app_url = "https://scrap-plastic-misclassification-simulation-jghvmoc7yc3tvmrhyul.streamlit.app/"
     qr_api_url = f"https://api.qrserver.com/v1/create-qr-code/?size=200x200&data={app_url}"
@@ -72,7 +68,6 @@ with col1:
             if student_name.strip() == "":
                 st.error("Please enter a name or alias before submitting!")
             else:
-                # Append new submission to our database
                 new_row = {
                     "Trader Name": student_name,
                     "HS Code": hs_code,
@@ -91,60 +86,71 @@ with col2:
     
     df = st.session_state.submissions.copy()
     
-    # Feature Engineering: Calculate Value Mismatch (Price Deficit)
-    df["Baseline Price"] = df["HS Code"].map(baseline_prices)
-    df["Price Deficit"] = df["Baseline Price"] - df["Declared Price ($/KG)"]
-    
-    # Run K-Means Live Clustering
-    try:
-        X = df[["Weight (KG)", "Price Deficit"]]
-        scaler = StandardScaler()
-        X_scaled = scaler.fit_transform(X)
+    # Custom profile rules engine that works cleanly for empty or growing datasets
+    def define_profile(row):
+        base_p = baseline_prices.get(int(row["HS Code"]), 4.0)
+        deficit = base_p - float(row["Declared Price ($/KG)"])
+        if int(row["Weight (KG)"]) == 100000 and deficit > 2.0:
+            return "🚨 CRITICAL RISK: Large-scale Waste Dumping"
+        elif deficit <= 0.0:
+            return "✅ LOW RISK: Fully Compliant Market Price"
+        elif int(row["Weight (KG)"]) == 10000 and deficit > 1.0:
+            return "⚠️ MEDIUM RISK: Stealth Smuggling Attempt"
+        else:
+            return "🔍 MODERATE RISK: Suspicious Value Manipulation"
+
+    # Process metrics and ML calculations dynamically
+    if not df.empty:
+        df["Baseline Price"] = df["HS Code"].map(baseline_prices)
+        df["Price Deficit"] = df["Baseline Price"] - df["Declared Price ($/KG)"]
         
-        kmeans = KMeans(n_clusters=3, random_state=42, n_init=10)
-        df["Cluster_ID"] = kmeans.fit_predict(X_scaled)
-        
-        # Smart Risk Labeling Logic based on centroid profiles
-        def define_profile(row):
-            if row["Weight (KG)"] == 100000 and row["Price Deficit"] > 2.0:
-                return "🚨 CRITICAL RISK: Large-scale Waste Dumping"
-            elif row["Price Deficit"] <= 0.0:
-                return "✅ LOW RISK: Fully Compliant Market Price"
-            elif row["Weight (KG)"] == 10000 and row["Price Deficit"] > 1.0:
-                return "⚠️ MEDIUM RISK: Stealth Smuggling Attempt"
-            else:
-                return "🔍 MODERATE RISK: Suspicious Value Manipulation"
+        # ML K-Means starts tracking automatically once 3 or more manifests are logged
+        if len(df) >= 3:
+            try:
+                X = df[["Weight (KG)", "Price Deficit"]]
+                scaler = StandardScaler()
+                X_scaled = scaler.fit_transform(X)
+                kmeans = KMeans(n_clusters=3, random_state=42, n_init=10)
+                df["Cluster_ID"] = kmeans.fit_predict(X_scaled)
+            except:
+                pass
                 
         df["Risk Profile"] = df.apply(define_profile, axis=1)
-        
-    except Exception as e:
-        df["Risk Profile"] = "Awaiting More Live Class Submissions..."
+        most_suspicious_hs = f"HS {df.groupby('HS Code')['Price Deficit'].mean().idxmax()}"
+        total_manifests = len(df)
+    else:
+        most_suspicious_hs = "None"
+        total_manifests = 0
 
-    # Analytics Summary Widgets
-    most_suspicious_hs = df.groupby("HS Code")["Price Deficit"].mean().idxmax()
-    
+    # Display Metrics Panel
     w1, w2 = st.columns(2)
-    w1.metric(label="Total Manifests Scanned", value=len(df))
-    w2.metric(label="Most Suspicious Exploited HS Code", value=f"HS {most_suspicious_hs}", delta="Highest Price Deficit")
+    w1.metric(label="Total Manifests Scanned", value=total_manifests)
+    w2.metric(label="Most Suspicious Exploited HS Code", value=most_suspicious_hs, 
+              delta="Highest Price Deficit" if total_manifests > 0 else None)
     
     st.subheader("🕵️ Live Risk Watchlist (Real-time ML Analysis)")
     
-    # Render scannable colored table dataframe
-    display_df = df[["Trader Name", "HS Code", "Weight (KG)", "Declared Price ($/KG)", "Risk Profile"]]
-    
-    def highlight_risk(val):
-        if "CRITICAL" in str(val): return 'background-color: #ffcccc; color: black; font-weight: bold;'
-        elif "MEDIUM" in str(val): return 'background-color: #fff2cc; color: black;'
-        elif "LOW" in str(val): return 'background-color: #e2efda; color: black;'
-        return ''
+    # Display table logic
+    if not df.empty:
+        display_df = df[["Trader Name", "HS Code", "Weight (KG)", "Declared Price ($/KG)", "Risk Profile"]]
         
-    # FIX: Replaced deprecated .applymap() with .map() for Pandas 2.0 compatibility
-    st.dataframe(
-        display_df.style.map(highlight_risk, subset=["Risk Profile"]),
-        use_container_width=True
-    )
-    
-    # Clear session button for next class period
-    if st.button("🔄 Reset Simulation Data"):
-        del st.session_state.submissions
-        st.rerun()
+        def highlight_risk(val):
+            if "CRITICAL" in str(val): return 'background-color: #ffcccc; color: black; font-weight: bold;'
+            elif "MEDIUM" in str(val): return 'background-color: #fff2cc; color: black;'
+            elif "LOW" in str(val): return 'background-color: #e2efda; color: black;'
+            return ''
+            
+        st.dataframe(
+            display_df.style.map(highlight_risk, subset=["Risk Profile"]),
+            use_container_width=True
+        )
+    else:
+        st.info("Awaiting the first digital customs manifest submission from students...")
+
+    # --- CAMOUFLAGED TEACHER RESET KEY (ONLY YOU KNOW) ---
+    # Creates vertical separation and hides inside a tiny dot expander at the very bottom
+    st.markdown("<br><br><br><br><br>", unsafe_allow_html=True)
+    with st.expander("·", expanded=False):
+        if st.button("🔄 Reset Simulation Data"):
+            del st.session_state.submissions
+            st.rerun()
